@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>獨立書店寄售管理系統</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 20px; background: #f4f6f8; color: #333; }
+    .card { background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    h2 { margin-top: 0; color: #2c3e50; font-size: 18px; border-bottom: 2px solid #2c3e50; padding-bottom: 8px; }
+    input, select, button { padding: 8px 12px; margin: 5px 0; border: 1px solid #ccc; border-radius: 4px; font-size: 14px; box-sizing: border-box; }
+    input[type="text"], input[type="email"], input[type="number"], select { width: 100%; }
+    button { background: #2c3e50; color: white; border: none; cursor: pointer; font-weight: bold; }
+    button:hover { background: #34495e; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    
+    @media print {
+      body * { visibility: hidden; }
+      #receipt-print-area, #receipt-print-area * { visibility: visible; }
+      #receipt-print-area { position: absolute; left: 0; top: 0; width: 100%; padding: 0; }
+      .no-print { display: none !important; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="grid no-print">
+    <!-- 1. 書店資料與 Logo 上傳 -->
+    <div class="card">
+      <h2>1. 書店資料與 Logo 設定</h2>
+      <label>書店名稱：</label>
+      <input type="text" id="storeName" placeholder="例如：獨立書店">
+      <label>聯絡電話：</label>
+      <input type="text" id="storePhone" placeholder="+852 1234 5678">
+      <label>電子郵件：</label>
+      <input type="email" id="storeEmail" placeholder="info@bookstore.hk">
+      <label>Instagram：</label>
+      <input type="text" id="storeIg" placeholder="@our_bookstore">
+      <label>上傳 Logo 圖片：</label>
+      <input type="file" id="logoFileInput" accept="image/*"><br><br>
+      <button onclick="saveStoreSettings()" style="width:100%;">保存資料並上傳 Logo</button>
+    </div>
+
+    <!-- 2. 新增寄售者 -->
+    <div class="card">
+      <h2>2. 新增寄售者</h2>
+      <label>寄售者 / 出版商名稱：</label>
+      <input type="text" id="consignorName" placeholder="例如：張三出版">
+      <label>聯絡電話：</label>
+      <input type="text" id="consignorPhone" placeholder="+852 9876 5432">
+      <label>預設拆帳比例 (例如 0.70 代表 70%)：</label>
+      <input type="number" id="splitRate" value="0.70" step="0.05"><br><br>
+      <button onclick="addConsignor()" style="width:100%;">新增寄售者</button>
+    </div>
+  </div>
+
+  <!-- 3. 入庫開單 -->
+  <div class="card no-print">
+    <h2>3. 入庫與開立寄售收據</h2>
+    <label>選擇寄售者：</label>
+    <select id="consignorSelect"></select><br><br>
+
+    <div style="display:flex; gap:10px;">
+      <input type="text" id="bookTitle" placeholder="書籍名稱">
+      <input type="text" id="bookIsbn" placeholder="ISBN 條碼">
+      <input type="number" id="bookPrice" placeholder="原價 (HKD)">
+      <input type="number" id="bookQty" placeholder="數量" value="1">
+    </div><br>
+    
+    <button onclick="processReceipt()" style="background: #27ae60; width:100%; font-size:16px; padding:12px;">生成並列印寄售收據</button>
+  </div>
+
+  <!-- 列印預覽區 -->
+  <div id="receipt-print-area" class="card" style="display:none; border:1px solid #ccc;">
+    <div style="display:flex; justify-content:space-between; border-bottom:2px solid #333; padding-bottom:10px;">
+      <div>
+        <img id="printLogo" src="" style="max-height:50px; display:none; margin-bottom:5px;">
+        <div id="printStoreName" style="font-size:16px; font-weight:bold;"></div>
+        <div id="printStoreInfo" style="font-size:12px; color:#555;"></div>
+      </div>
+      <div style="text-align:right;">
+        <h1 style="margin:0; font-size:20px;">寄售收據</h1>
+        <div id="printReceiptNo" style="font-size:12px; color:#666;"></div>
+      </div>
+    </div>
+
+    <div style="margin:15px 0; background:#f9f9f9; padding:10px; font-size:13px; border-radius:4px;">
+      <strong>寄售者：</strong><span id="printConsignorName"></span> | 
+      <strong>電話：</strong><span id="printConsignorPhone"></span> | 
+      <strong>拆帳比例：</strong><span id="printSplitRate"></span>
+    </div>
+
+    <table style="width:100%; border-collapse:collapse; margin-bottom:15px; font-size:13px;" border="1" cellpadding="6">
+      <thead>
+        <tr style="background:#eee;">
+          <th>書名</th><th>ISBN</th><th style="text-align:center;">數量</th><th style="text-align:right;">原價</th><th style="text-align:right;">預計可獲</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td id="printBookTitle"></td>
+          <td id="printBookIsbn"></td>
+          <td id="printBookQty" align="center"></td>
+          <td id="printBookPrice" align="right"></td>
+          <td id="printBookPayout" align="right"></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div style="text-align:right; font-size:14px; margin-bottom:30px;">
+      總原價：<span id="printTotalAmount"></span> &nbsp;|&nbsp; 
+      <strong>預計結算金額：</strong><span id="printTotalPayout" style="color:#b30000; font-weight:bold; font-size:16px;"></span>
+    </div>
+
+    <div style="display:flex; justify-content:space-between; margin-top:60px; font-size:12px;">
+      <div style="border-top:1px solid #000; width:40%; text-align:center; padding-top:5px;">寄售者 / 授權人簽署</div>
+      <div style="border-top:1px solid #000; width:40%; text-align:center; padding-top:5px;">書店蓋印 / 經手人簽署</div>
+    </div>
+  </div>
+
+  <script>
+    // ⚠️ 請填入你的 Supabase 連線資料
+    const SUPABASE_URL = 'https://gkfudwnkkrabhnmvifop.supabase.co';
+    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdrZnVkd25ra3JhYmhubXZpZm9wIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgxNzg5NjAsImV4cCI6MjEwMzc1NDk2MH0.r3cEqVpdR0PD4TFu_2QOhDOqLiwWh5FHUVmpa168Fuk';
+    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    // 頁面載入時讀取寄售者與書店資料
+    window.onload = () => {
+      loadConsignors();
+      loadStoreSettings();
+    };
+
+    async function saveStoreSettings() {
+      const name = document.getElementById('storeName').value;
+      const phone = document.getElementById('storePhone').value;
+      const email = document.getElementById('storeEmail').value;
+      const ig = document.getElementById('storeIg').value;
+      const file = document.getElementById('logoFileInput').files[0];
+
+      let logoUrl = '';
+      if(file) {
+        const fileName = `logo-${Date.now()}`;
+        const { error: uploadErr } = await supabaseClient.storage.from('store-assets').upload(fileName, file);
+        if(uploadErr) return alert('Logo 上傳失敗：' + uploadErr.message);
+        
+        const { data } = supabaseClient.storage.from('store-assets').getPublicUrl(fileName);
+        logoUrl = data.publicUrl;
+      }
+
+      const { error } = await supabaseClient.from('store_profile').upsert({
+        id: 1, store_name: name, phone: phone, email: email, instagram: ig,
+        ...(logoUrl && { logo_url: logoUrl })
+      });
+
+      if(!error) alert('書店資料與 Logo 設定已成功更新！');
+    }
+
+    async function loadStoreSettings() {
+      const { data } = await supabaseClient.from('store_profile').select('*').eq('id', 1).single();
+      if(data) {
+        document.getElementById('storeName').value = data.store_name || '';
+        document.getElementById('storePhone').value = data.phone || '';
+        document.getElementById('storeEmail').value = data.email || '';
+        document.getElementById('storeIg').value = data.instagram || '';
+      }
+    }
+
+    async function addConsignor() {
+      const name = document.getElementById('consignorName').value;
+      const phone = document.getElementById('consignorPhone').value;
+      const rate = parseFloat(document.getElementById('splitRate').value);
+
+      if(!name) return alert('請輸入寄售者姓名');
+      await supabaseClient.from('consignors').insert({ name, phone, default_split_rate: rate });
+      alert('成功新增寄售者！');
+      loadConsignors();
+    }
+
+    async function loadConsignors() {
+      const { data } = await supabaseClient.from('consignors').select('*');
+      const select = document.getElementById('consignorSelect');
+      select.innerHTML = '<option value="">-- 請選擇寄售者 --</option>';
+      if(data) {
+        data.forEach(c => {
+          select.innerHTML += `<option value="${c.id}" data-rate="${c.default_split_rate}" data-phone="${c.phone || ''}">${c.name} (${c.default_split_rate * 100}%)</option>`;
+        });
+      }
+    }
+
+    async function processReceipt() {
+      const select = document.getElementById('consignorSelect');
+      if(!select.value) return alert('請選擇寄售者！');
+
+      const consignorId = select.value;
+      const consignorName = select.options[select.selectedIndex].text;
+      const consignorPhone = select.options[select.selectedIndex].getAttribute('data-phone');
+      const splitRate = parseFloat(select.options[select.selectedIndex].getAttribute('data-rate'));
+
+      const title = document.getElementById('bookTitle').value;
+      const isbn = document.getElementById('bookIsbn').value;
+      const price = parseFloat(document.getElementById('bookPrice').value);
+      const qty = parseInt(document.getElementById('bookQty').value);
+
+      if(!title || !price) return alert('請填寫書名與價格');
+
+      // 1. 新增或更新書籍庫（連動庫存）
+      let { data: book } = await supabaseClient.from('books').select('*').eq('isbn', isbn).single();
+      if (!book) {
+        await supabaseClient.from('books').insert({ title, isbn, price, stock: qty, consignor_id: consignorId });
+      } else {
+        await supabaseClient.from('books').update({ stock: book.stock + qty }).eq('id', book.id);
+      }
+
+      // 2. 抓取書店資料
+      const { data: store } = await supabaseClient.from('store_profile').select('*').eq('id', 1).single();
+
+      // 3. 帶入收據資料
+      if (store && store.logo_url) {
+        document.getElementById('printLogo').src = store.logo_url;
+        document.getElementById('printLogo').style.display = 'block';
+      }
+      document.getElementById('printStoreName').innerText = store ? store.store_name : '獨立書店';
+      document.getElementById('printStoreInfo').innerText = `電話: ${store?.phone || ''} | 電郵: ${store?.email || ''} | IG: ${store?.instagram || ''}`;
+      document.getElementById('printReceiptNo').innerText = `單號：CR-${Date.now()}`;
+
+      document.getElementById('printConsignorName').innerText = consignorName;
+      document.getElementById('printConsignorPhone').innerText = consignorPhone || '-';
+      document.getElementById('printSplitRate').innerText = `${splitRate * 100}%`;
+
+      document.getElementById('printBookTitle').innerText = title;
+      document.getElementById('printBookIsbn').innerText = isbn || '-';
+      document.getElementById('printBookQty').innerText = qty;
+      document.getElementById('printBookPrice').innerText = `$${price.toFixed(2)}`;
+      
+      const payout = price * qty * splitRate;
+      document.getElementById('printBookPayout').innerText = `$${payout.toFixed(2)}`;
+      document.getElementById('printTotalAmount').innerText = `$${(price * qty).toFixed(2)}`;
+      document.getElementById('printTotalPayout').innerText = `$${payout.toFixed(2)}`;
+
+      // 4. 開啟預覽並觸發列印
+      document.getElementById('receipt-print-area').style.display = 'block';
+      window.print();
+    }
+  </script>
+</body>
+</html>
