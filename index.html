@@ -3,326 +3,673 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>書店及文創多分店進銷存與寄售系統</title>
+  <title>書店多分店進銷存與寄售系統 - 第二版</title>
+  <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
-  <script src="https://unpkg.com/html5-qrcode"></script>
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <!-- Vue 3 CDN -->
+  <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
   <style>
     @media print {
-      body * { visibility: hidden; }
-      #printArea, #printArea * { visibility: visible; }
-      #printArea { position: absolute; left: 0; top: 0; width: 100%; }
-      .no-print { display: none !important; }
+      body * {
+        visibility: hidden;
+      }
+      #printable-receipt, #printable-receipt * {
+        visibility: visible;
+      }
+      #printable-receipt {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        margin: 0;
+        padding: 20px;
+        background: white;
+      }
+      .no-print {
+        display: none !important;
+      }
     }
   </style>
 </head>
-<body class="bg-slate-100 min-h-screen p-4 md:p-8 font-sans">
-
-  <!-- 🔒 登入視窗 (預設顯示) -->
-  <div id="loginView" class="max-w-md mx-auto bg-white rounded-2xl shadow-md border p-6 mt-12">
-    <h2 class="text-xl font-bold text-slate-900 mb-2 text-center">📚 系統登入</h2>
-    <p class="text-xs text-slate-500 mb-6 text-center">請輸入員工帳號與密碼以繼續</p>
+<body class="bg-slate-100 text-slate-800 font-sans min-h-screen">
+  <div id="app" class="max-w-7xl mx-auto p-4 md:p-6">
     
-    <form onsubmit="handleLogin(event)" class="space-y-4 text-xs">
-      <div>
-        <label class="font-bold text-slate-700 block mb-1">Email 帳號</label>
-        <input type="email" id="loginEmail" required placeholder="user@example.com" class="w-full p-2.5 border rounded-lg">
-      </div>
-      <div>
-        <label class="font-bold text-slate-700 block mb-1">密碼</label>
-        <input type="password" id="loginPassword" required placeholder="••••••••" class="w-full p-2.5 border rounded-lg">
-      </div>
-      <p id="loginError" class="text-red-500 text-xs hidden"></p>
-      <button type="submit" id="loginBtn" class="w-full bg-blue-600 text-white py-2.5 rounded-lg font-bold hover:bg-blue-700 transition">登入系統</button>
-    </form>
-  </div>
-
-  <!-- 📦 主系統介面 (未登入前隱藏) -->
-  <div id="appView" class="hidden max-w-6xl mx-auto bg-white rounded-2xl shadow-sm border p-6 no-print">
-    
-    <!-- 頂部 Header & 分頁頁簽 -->
-    <div class="flex flex-col md:flex-row justify-between items-start md:items-center pb-4 border-b gap-4">
-      <div>
-        <div class="flex items-center gap-2">
-          <h1 class="text-xl font-bold text-slate-900">📚 書店多分店進銷存與寄售系統</h1>
-          <span class="bg-slate-100 text-slate-500 text-xs px-2 py-0.5 rounded-full border">內部專用</span>
+    <!-- 登入 Modal (第二版) -->
+    <div v-if="!isLoggedIn" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+      <div class="bg-white rounded-2xl shadow-2xl p-6 md:p-8 max-w-md w-full border border-slate-200">
+        <div class="text-center mb-6">
+          <div class="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-3 text-2xl">
+            <i class="fa-solid fa-user-shield"></i>
+          </div>
+          <h2 class="text-2xl font-bold text-slate-900">多分店寄售系統 (Ver. 2)</h2>
+          <p class="text-xs text-slate-500 mt-1">請輸入管理員密碼以存取完整功能</p>
         </div>
-        <p class="text-xs text-slate-500 mt-1">支持 3 間分店：觀塘店 / 西營盤店 / 荃灣店</p>
-      </div>
-
-      <!-- 右上角使用者資訊與登出按鈕 -->
-      <div class="flex items-center gap-3">
-        <span id="userEmailTag" class="text-xs font-semibold text-slate-600 bg-slate-100 px-3 py-1.5 rounded-lg"></span>
-        <button onclick="handleLogout()" class="text-xs bg-red-50 text-red-600 font-bold px-3 py-1.5 rounded-lg border border-red-100 hover:bg-red-100">登出</button>
-      </div>
-      
-      <!-- 分頁切換按鈕 -->
-      <div class="flex bg-slate-100 p-1 rounded-xl border">
-        <button id="tabBtnBooks" onclick="switchTab('books')" class="px-4 py-2 text-xs font-bold rounded-lg bg-white shadow-sm text-blue-600">📖 書籍管理</button>
-        <button id="tabBtnCrafts" onclick="switchTab('crafts')" class="px-4 py-2 text-xs font-bold rounded-lg text-slate-600 hover:text-slate-900">🎨 文創商品</button>
-        <button id="tabBtnConsign" onclick="switchTab('consign')" class="px-4 py-2 text-xs font-bold rounded-lg text-slate-600 hover:text-slate-900">📄 寄售單據</button>
+        <form @submit.prevent="login" class="space-y-4">
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">系統密碼</label>
+            <input v-model="passwordInput" type="password" placeholder="預設密碼：admin123" class="w-full px-4 py-2.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+            <p v-if="loginError" class="text-xs text-rose-500 mt-1">{{ loginError }}</p>
+          </div>
+          <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-2.5 rounded-lg text-sm transition shadow-sm">
+            登入系統
+          </button>
+          <button @click="loginAsGuest" type="button" class="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium py-2 rounded-lg text-xs transition">
+            以訪客身份檢視 (唯讀)
+          </button>
+        </form>
       </div>
     </div>
 
-    <!-- TAB 1: 書籍管理 -->
-    <div id="tabBooks" class="tab-content mt-6">
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-        <div class="bg-blue-50/50 border border-blue-100 p-4 rounded-xl">
-          <p class="text-xs text-slate-500 font-medium">現有庫存 (在地)</p>
-          <p id="statStock" class="text-2xl font-bold text-blue-900 mt-1">0 本</p>
+    <!-- 頂部 Header & 書店資訊 -->
+    <header class="bg-white rounded-xl shadow-sm border border-slate-200 p-5 mb-6">
+      <div class="flex flex-col md:flex-row justify-between items-center gap-4">
+        <div class="flex items-center gap-4">
+          <!-- Logo 預覽 -->
+          <div class="w-16 h-16 rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-center overflow-hidden flex-shrink-0">
+            <img v-if="storeInfo.logo" :src="storeInfo.logo" alt="Logo" class="w-full h-full object-contain">
+            <i v-else class="fa-solid fa-store text-2xl text-slate-400"></i>
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <h1 class="text-2xl font-bold text-slate-900">{{ storeInfo.name || '無所事事小書店' }}</h1>
+              <span class="bg-emerald-100 text-emerald-800 text-xs px-2.5 py-0.5 rounded-full font-medium">系統 Version 2</span>
+              <span v-if="isGuest" class="bg-amber-100 text-amber-800 text-xs px-2 py-0.5 rounded font-bold">訪客模式</span>
+            </div>
+            <p class="text-xs text-slate-500 mt-1">
+              支持 3 間分店：觀塘店 / 西營盤店 / 荃灣店 &nbsp;|&nbsp; 
+              電話：{{ storeInfo.phone || '53253883' }} &nbsp;|&nbsp; 
+              電郵：{{ storeInfo.email || 'donothing.bookshop@gmail.com' }}
+            </p>
+          </div>
         </div>
-        <div class="bg-emerald-50/50 border border-emerald-100 p-4 rounded-xl">
-          <p class="text-xs text-slate-500 font-medium">累計售出本數</p>
-          <p id="statSold" class="text-2xl font-bold text-emerald-900 mt-1">0 本</p>
-        </div>
-        <div class="bg-amber-50/50 border border-amber-100 p-4 rounded-xl">
-          <p class="text-xs text-slate-500 font-medium">總銷售金額 (HKD)</p>
-          <p id="statRevenue" class="text-2xl font-bold text-amber-900 mt-1">$ 0</p>
+
+        <!-- 頁籤導覽與按鈕 -->
+        <div class="flex items-center gap-2">
+          <button @click="currentTab = 'receipts'" 
+                  :class="currentTab === 'receipts' ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'"
+                  class="px-4 py-2 rounded-lg font-medium text-sm transition flex items-center gap-2">
+            <i class="fa-solid fa-receipt"></i> 寄售單據
+          </button>
+          <button @click="currentTab = 'consignors'" 
+                  :class="currentTab === 'consignors' ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'"
+                  class="px-4 py-2 rounded-lg font-medium text-sm transition flex items-center gap-2">
+            <i class="fa-solid fa-users"></i> 寄售者管理
+          </button>
+          <button @click="currentTab = 'settings'" 
+                  :class="currentTab === 'settings' ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'"
+                  class="px-4 py-2 rounded-lg font-medium text-sm transition flex items-center gap-2">
+            <i class="fa-solid fa-gear"></i> 書店設定
+          </button>
+          <button v-if="isLoggedIn" @click="logout" class="bg-rose-50 text-rose-600 hover:bg-rose-100 px-3 py-2 rounded-lg text-sm font-medium transition ml-2">
+            <i class="fa-solid fa-right-from-bracket"></i> 登出
+          </button>
         </div>
       </div>
+    </header>
 
-      <div class="bg-slate-50 p-4 rounded-xl border mb-6">
-        <div class="flex justify-between items-center mb-3">
-          <h2 class="text-xs font-bold text-slate-700">進貨與書籍搜尋</h2>
-          <button onclick="openBookModal()" class="bg-blue-600 text-white text-xs font-bold px-3 py-1.5 rounded-lg hover:bg-blue-700">+ 手動新增書籍 / 作者寄售</button>
-        </div>
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+    <!-- 主要內容區 -->
+    <main v-if="isLoggedIn">
+      
+      <!-- 1. 寄售單據與開單 Tab -->
+      <section v-if="currentTab === 'receipts'" class="space-y-6">
+        
+        <!-- 頂部操作列 -->
+        <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <label class="text-xs text-slate-500 mb-1 block">1. ISBN 條碼搜尋：</label>
-            <div class="flex gap-2">
-              <input type="text" id="isbnInput" placeholder="輸入或掃描 ISBN" class="w-full text-xs p-2.5 border rounded-lg bg-white">
-              <button onclick="searchISBN()" class="bg-blue-600 text-white px-4 text-xs font-bold rounded-lg hover:bg-blue-700 whitespace-nowrap">搜尋</button>
+            <h2 class="text-lg font-bold text-slate-900">寄售紀錄與單據清單</h2>
+            <p class="text-sm text-slate-500">檢視所有門市開立之寄售單據紀錄</p>
+          </div>
+          <button v-if="!isGuest" @click="openReceiptModal" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-lg font-medium text-sm shadow-sm transition flex items-center gap-2">
+            <i class="fa-solid fa-plus"></i> 開立新寄售單
+          </button>
+        </div>
+
+        <!-- 寄售單據表格 -->
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse text-sm">
+              <thead>
+                <tr class="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
+                  <th class="py-3.5 px-4">單號</th>
+                  <th class="py-3.5 px-4">寄售人 / 單位</th>
+                  <th class="py-3.5 px-4">聯絡電話</th>
+                  <th class="py-3.5 px-4">存放分店</th>
+                  <th class="py-3.5 px-4 text-right">總金額</th>
+                  <th class="py-3.5 px-4">建立日期</th>
+                  <th class="py-3.5 px-4 text-center">操作</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-200 text-slate-700">
+                <tr v-if="receipts.length === 0">
+                  <td colspan="7" class="py-8 text-center text-slate-400">
+                    目前尚無寄售單據紀錄，請點擊上方「開立新寄售單」。
+                  </td>
+                </tr>
+                <tr v-for="receipt in receipts" :key="receipt.id" class="hover:bg-slate-50">
+                  <td class="py-3.5 px-4 font-mono font-medium text-emerald-700">{{ receipt.id }}</td>
+                  <td class="py-3.5 px-4 font-medium">{{ receipt.consignorName }}</td>
+                  <td class="py-3.5 px-4">{{ receipt.consignorPhone || '-' }}</td>
+                  <td class="py-3.5 px-4">
+                    <span class="inline-block bg-slate-100 border border-slate-200 px-2.5 py-0.5 rounded text-xs text-slate-700">
+                      {{ receipt.branch }}
+                    </span>
+                  </td>
+                  <td class="py-3.5 px-4 text-right font-semibold text-slate-900">$ {{ receipt.totalAmount.toLocaleString() }}</td>
+                  <td class="py-3.5 px-4 text-slate-500">{{ receipt.createdAt }}</td>
+                  <td class="py-3.5 px-4 text-center space-x-2">
+                    <button @click="printReceipt(receipt)" class="text-emerald-600 hover:text-emerald-800 font-medium px-2 py-1 bg-emerald-50 rounded hover:bg-emerald-100 transition">
+                      <i class="fa-solid fa-print"></i> 列印
+                    </button>
+                    <button v-if="!isGuest" @click="deleteReceipt(receipt.id)" class="text-rose-600 hover:text-rose-800 font-medium px-2 py-1 bg-rose-50 rounded hover:bg-rose-100 transition">
+                      <i class="fa-solid fa-trash"></i> 刪除
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- 2. 寄售者管理 Tab -->
+      <section v-if="currentTab === 'consignors'" class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <!-- 新增寄售者卡片 -->
+        <div v-if="!isGuest" class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm md:col-span-1">
+          <h2 class="text-lg font-bold text-slate-900 mb-4 pb-2 border-b border-slate-200">新增寄售者</h2>
+          <form @submit.prevent="addConsignor" class="space-y-4">
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">寄售者 / 出版商名稱：</label>
+              <input v-model="newConsignor.name" required type="text" placeholder="例如：張三出版" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">聯絡電話：</label>
+              <input v-model="newConsignor.phone" type="text" placeholder="+852 9876 5432" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">預設拆帳比例：</label>
+              <input v-model="newConsignor.splitRatio" type="text" placeholder="0.70" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+            </div>
+            <button type="submit" class="w-full bg-slate-800 hover:bg-slate-900 text-white font-medium py-2.5 rounded-lg text-sm transition shadow-sm">
+              新增寄售者
+            </button>
+          </form>
+        </div>
+
+        <!-- 寄售者名單 -->
+        <div :class="isGuest ? 'md:col-span-3' : 'md:col-span-2'" class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+          <h2 class="text-lg font-bold text-slate-900 mb-4 pb-2 border-b border-slate-200">現有寄售者清單</h2>
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-sm">
+              <thead>
+                <tr class="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
+                  <th class="py-2.5 px-3">名稱</th>
+                  <th class="py-2.5 px-3">電話</th>
+                  <th class="py-2.5 px-3">預設拆帳</th>
+                  <th v-if="!isGuest" class="py-2.5 px-3 text-right">操作</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-200">
+                <tr v-for="c in consignors" :key="c.id" class="hover:bg-slate-50">
+                  <td class="py-2.5 px-3 font-medium text-slate-900">{{ c.name }}</td>
+                  <td class="py-2.5 px-3 text-slate-600">{{ c.phone || '-' }}</td>
+                  <td class="py-2.5 px-3 text-slate-600">{{ (parseFloat(c.splitRatio || 0.7) * 100).toFixed(0) }} % ({{ c.splitRatio }})</td>
+                  <td v-if="!isGuest" class="py-2.5 px-3 text-right">
+                    <button @click="deleteConsignor(c.id)" class="text-rose-600 hover:text-rose-800 text-xs font-medium">刪除</button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- 3. 書店資料與 Logo 設定 Tab -->
+      <section v-if="currentTab === 'settings'" class="max-w-2xl mx-auto bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+        <h2 class="text-lg font-bold text-slate-900 mb-4 pb-2 border-b border-slate-200">書店資料與 Logo 設定</h2>
+        <form @submit.prevent="saveStoreInfo" class="space-y-4">
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">書店名稱：</label>
+            <input :disabled="isGuest" v-model="storeInfo.name" required type="text" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">聯絡電話：</label>
+            <input :disabled="isGuest" v-model="storeInfo.phone" type="text" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">電子郵件：</label>
+            <input :disabled="isGuest" v-model="storeInfo.email" type="email" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Instagram：</label>
+            <input :disabled="isGuest" v-model="storeInfo.instagram" type="text" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+          </div>
+          <div v-if="!isGuest">
+            <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">上傳 Logo 圖片：</label>
+            <input type="file" @change="handleLogoUpload" accept="image/*" class="w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200">
+          </div>
+
+          <div v-if="storeInfo.logo" class="mt-2">
+            <span class="text-xs text-slate-500 block mb-1">現有 Logo 預覽：</span>
+            <img :src="storeInfo.logo" alt="Logo Preview" class="h-16 w-auto border rounded p-1">
+          </div>
+
+          <button v-if="!isGuest" type="submit" class="w-full bg-slate-800 hover:bg-slate-900 text-white font-medium py-2.5 rounded-lg text-sm transition shadow-sm mt-4">
+            保存資料並上傳 Logo
+          </button>
+        </form>
+      </section>
+
+    </main>
+
+    <!-- 開立寄售單 Modal -->
+    <div v-if="showReceiptModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+      <div class="bg-white rounded-2xl shadow-xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[90vh]">
+        
+        <div class="px-6 py-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
+          <div class="flex items-center gap-2">
+            <i class="fa-solid fa-file-invoice text-emerald-600 text-lg"></i>
+            <h3 class="font-bold text-slate-900 text-base">開立寄售單 (Consignment Receipt)</h3>
+          </div>
+          <button @click="showReceiptModal = false" class="text-slate-400 hover:text-slate-600 text-lg">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+
+        <div class="p-6 overflow-y-auto space-y-5">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 mb-1">寄售人 / 創作者 / 出版社名稱：</label>
+              <select v-model="activeReceipt.consignorId" @change="onConsignorSelect" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                <option value="">-- 請選擇寄售者 --</option>
+                <option v-for="c in consignors" :key="c.id" :value="c.id">{{ c.name }}</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 mb-1">聯絡電話：</label>
+              <input v-model="activeReceipt.consignorPhone" type="text" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none" placeholder="聯絡電話">
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 mb-1">寄售分店：</label>
+              <select v-model="activeReceipt.branch" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                <option value="觀塘店">觀塘店</option>
+                <option value="西營盤店">西營盤店</option>
+                <option value="荃灣店">荃灣店</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 mb-1">備註 / 拆帳條款：</label>
+              <input v-model="activeReceipt.notes" type="text" placeholder="例如：73 拆分帳" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none">
             </div>
           </div>
-          <div>
-            <label class="text-xs text-slate-500 mb-1 block">2. 📸 拍照/上傳封面找書：</label>
-            <label class="flex items-center justify-center bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold py-2.5 px-4 rounded-lg cursor-pointer transition">
-              <span>📸 拍照/上傳封面</span>
-              <input type="file" id="coverImageInput" accept="image/*" class="hidden" onchange="uploadCoverAndSearch(this)">
-            </label>
+
+          <div class="pt-2">
+            <div class="flex justify-between items-center mb-3">
+              <h4 class="text-xs font-bold text-slate-700 uppercase tracking-wider">寄售貨品細項</h4>
+              <div class="flex gap-2">
+                <button @click="addItem('書籍')" type="button" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold px-3 py-1.5 rounded-lg transition flex items-center gap-1">
+                  <i class="fa-solid fa-plus text-xs"></i> 新增書籍
+                </button>
+                <button @click="addItem('文創')" type="button" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold px-3 py-1.5 rounded-lg transition flex items-center gap-1">
+                  <i class="fa-solid fa-plus text-xs"></i> 新增文創
+                </button>
+              </div>
+            </div>
+
+            <div class="border border-slate-200 rounded-xl overflow-hidden">
+              <table class="w-full text-left text-xs">
+                <thead class="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
+                  <tr>
+                    <th class="py-2.5 px-3 w-16">類別</th>
+                    <th class="py-2.5 px-3">商品名稱</th>
+                    <th class="py-2.5 px-3 w-32">ISBN / 條碼</th>
+                    <th class="py-2.5 px-3 w-24">原價 (HKD)</th>
+                    <th class="py-2.5 px-3 w-20">數量</th>
+                    <th class="py-2.5 px-3 w-24 text-right">小計</th>
+                    <th class="py-2.5 px-3 w-12 text-center"></th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-200">
+                  <tr v-if="activeReceipt.items.length === 0">
+                    <td colspan="7" class="py-6 text-center text-slate-400">
+                      請點擊上方「+ 新增書籍」或「+ 新增文創」加入寄售商品
+                    </td>
+                  </tr>
+                  <tr v-for="(item, index) in activeReceipt.items" :key="index" class="hover:bg-slate-50">
+                    <td class="py-2 px-3">
+                      <span :class="item.type === '書籍' ? 'bg-amber-100 text-amber-800' : 'bg-purple-100 text-purple-800'" class="px-2 py-0.5 rounded text-[10px] font-bold">
+                        {{ item.type }}
+                      </span>
+                    </td>
+                    <td class="py-2 px-3">
+                      <input v-model="item.name" type="text" placeholder="商品名稱" class="w-full px-2 py-1 border border-slate-200 rounded text-xs focus:ring-1 focus:ring-emerald-500 focus:outline-none">
+                    </td>
+                    <td class="py-2 px-3">
+                      <input v-model="item.code" type="text" placeholder="條碼/編號" class="w-full px-2 py-1 border border-slate-200 rounded text-xs focus:ring-1 focus:ring-emerald-500 focus:outline-none">
+                    </td>
+                    <td class="py-2 px-3">
+                      <input v-model.number="item.price" type="number" min="0" placeholder="0" class="w-full px-2 py-1 border border-slate-200 rounded text-xs focus:ring-1 focus:ring-emerald-500 focus:outline-none">
+                    </td>
+                    <td class="py-2 px-3">
+                      <input v-model.number="item.qty" type="number" min="1" class="w-full px-2 py-1 border border-slate-200 rounded text-xs focus:ring-1 focus:ring-emerald-500 focus:outline-none">
+                    </td>
+                    <td class="py-2 px-3 text-right font-medium text-slate-900">
+                      $ {{ (item.price * item.qty || 0).toLocaleString() }}
+                    </td>
+                    <td class="py-2 px-3 text-center">
+                      <button @click="removeItem(index)" class="text-rose-500 hover:text-rose-700">
+                        <i class="fa-solid fa-xmark"></i>
+                      </button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="flex justify-between items-center mt-4 p-3 bg-emerald-50 border border-emerald-200 rounded-xl">
+              <span class="text-sm font-bold text-emerald-900">寄售總金額：</span>
+              <span class="text-xl font-bold text-emerald-700">$ {{ calculateTotal().toLocaleString() }}</span>
+            </div>
           </div>
+
+        </div>
+
+        <div class="px-6 py-3 border-t border-slate-200 bg-slate-50 flex justify-end gap-3">
+          <button @click="showReceiptModal = false" type="button" class="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-200 rounded-lg transition">
+            取消
+          </button>
+          <button @click="saveAndPrintReceipt" type="button" class="px-5 py-2 text-sm font-medium bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition shadow-sm flex items-center gap-2">
+            <i class="fa-solid fa-check"></i> 儲存並生成寄售單
+          </button>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- 列印用專用區塊 -->
+    <div id="printable-receipt" class="hidden print:block p-8 bg-white max-w-3xl mx-auto border text-slate-800">
+      <div class="flex justify-between items-start border-b-2 border-slate-800 pb-4 mb-6">
+        <div class="flex items-center gap-4">
+          <img v-if="storeInfo.logo" :src="storeInfo.logo" class="h-16 w-auto object-contain">
           <div>
-            <label class="text-xs text-slate-500 mb-1 block">3. 相機掃描碼：</label>
-            <button onclick="toggleScanner()" class="w-full bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold py-2.5 px-4 rounded-lg">開啟相機鏡頭</button>
+            <h1 class="text-2xl font-bold text-slate-900">{{ storeInfo.name }}</h1>
+            <p class="text-xs text-slate-600">分店：{{ printingReceipt.branch }} | 電話：{{ storeInfo.phone }}</p>
+            <p class="text-xs text-slate-600">電郵：{{ storeInfo.email }}</p>
           </div>
+        </div>
+        <div class="text-right">
+          <h2 class="text-xl font-bold text-slate-800">寄售收據 / 存單</h2>
+          <p class="text-xs font-mono text-slate-500 mt-1">單號：{{ printingReceipt.id }}</p>
+          <p class="text-xs text-slate-500">日期：{{ printingReceipt.createdAt }}</p>
         </div>
       </div>
 
-      <div class="flex justify-between items-center mb-3">
-        <h2 class="text-sm font-bold text-slate-800">庫存與銷售紀錄</h2>
-        <div class="flex gap-2">
-          <input type="text" id="bookSearchKeyword" onkeyup="filterBooks()" placeholder="搜尋書名 / ISBN / 作者..." class="text-xs p-2 border rounded-lg w-48">
-          <select id="storeFilter" onchange="filterBooks()" class="text-xs p-2 border rounded-lg">
-            <option value="全部">分店：全部分店</option>
-            <option value="觀塘店">觀塘店</option>
-            <option value="西營盤店">西營盤店</option>
-            <option value="荃灣店">荃灣店</option>
-          </select>
+      <div class="grid grid-cols-2 gap-4 text-xs mb-6 bg-slate-50 p-4 rounded border border-slate-200">
+        <div>
+          <p><strong>寄售者 / 單位：</strong> {{ printingReceipt.consignorName }}</p>
+          <p class="mt-1"><strong>聯絡電話：</strong> {{ printingReceipt.consignorPhone || '無' }}</p>
+        </div>
+        <div>
+          <p><strong>存放分店：</strong> {{ printingReceipt.branch }}</p>
+          <p class="mt-1"><strong>拆帳備註：</strong> {{ printingReceipt.notes || '預設條款' }}</p>
         </div>
       </div>
 
-      <div class="overflow-x-auto border rounded-xl">
-        <table class="w-full text-left text-xs text-slate-600">
-          <thead class="bg-slate-100 text-slate-700 font-bold border-b">
-            <tr>
-              <th class="p-3 w-14">封面</th>
-              <th class="p-3">書名</th>
-              <th class="p-3">屬性/條款</th>
-              <th class="p-3">分店</th>
-              <th class="p-3">ISBN</th>
-              <th class="p-3">單價</th>
-              <th class="p-3">數量</th>
-              <th class="p-3">狀態</th>
-              <th class="p-3">操作</th>
-            </tr>
-          </thead>
-          <tbody id="bookTableBody" class="divide-y"></tbody>
-        </table>
+      <table class="w-full text-left text-xs border-collapse mb-6">
+        <thead>
+          <tr class="border-b-2 border-slate-800 bg-slate-100">
+            <th class="py-2 px-2">類別</th>
+            <th class="py-2 px-2">貨品名稱</th>
+            <th class="py-2 px-2">ISBN / 條碼</th>
+            <th class="py-2 px-2 text-right">單價</th>
+            <th class="py-2 px-2 text-center">數量</th>
+            <th class="py-2 px-2 text-right">小計</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-200">
+          <tr v-for="item in printingReceipt.items" :key="item.name">
+            <td class="py-2 px-2">{{ item.type }}</td>
+            <td class="py-2 px-2 font-medium">{{ item.name }}</td>
+            <td class="py-2 px-2 font-mono">{{ item.code || '-' }}</td>
+            <td class="py-2 px-2 text-right">$ {{ item.price }}</td>
+            <td class="py-2 px-2 text-center">{{ item.qty }}</td>
+            <td class="py-2 px-2 text-right font-medium">$ {{ item.price * item.qty }}</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="flex justify-between items-end border-t border-slate-300 pt-4">
+        <div class="text-xs text-slate-500 space-y-8">
+          <p>寄售人簽署：____________________</p>
+          <p>門市經手人：____________________</p>
+        </div>
+        <div class="text-right">
+          <p class="text-xs text-slate-500">寄售總金額 (HKD)</p>
+          <p class="text-2xl font-bold text-slate-900">$ {{ (printingReceipt.totalAmount || 0).toLocaleString() }}</p>
+        </div>
       </div>
     </div>
 
-    <!-- TAB 2: 文創商品 -->
-    <div id="tabCrafts" class="tab-content hidden mt-6">
-      <div class="flex justify-between items-center mb-4">
-        <h2 class="text-sm font-bold text-slate-800">文創商品清單</h2>
-        <button onclick="openCraftModal()" class="bg-indigo-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-indigo-700">+ 新增文創商品</button>
-      </div>
-      <div class="overflow-x-auto border rounded-xl">
-        <table class="w-full text-left text-xs text-slate-600">
-          <thead class="bg-slate-100 text-slate-700 font-bold border-b">
-            <tr>
-              <th class="p-3 w-14">相片</th>
-              <th class="p-3">商品名稱</th>
-              <th class="p-3">創作者/品牌</th>
-              <th class="p-3">IG/電話</th>
-              <th class="p-3">分店</th>
-              <th class="p-3">售價</th>
-              <th class="p-3">庫存</th>
-              <th class="p-3">操作</th>
-            </tr>
-          </thead>
-          <tbody id="craftTableBody" class="divide-y"></tbody>
-        </table>
-      </div>
-    </div>
-
-    <!-- TAB 3: 寄售單與收據 -->
-    <div id="tabConsign" class="tab-content hidden mt-6">
-      <div class="flex justify-between items-center mb-4">
-        <h2 class="text-sm font-bold text-slate-800">寄售紀錄與單據清單</h2>
-        <button onclick="openConsignmentModal()" class="bg-emerald-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-emerald-700">+ 開立新寄售單</button>
-      </div>
-      <div class="overflow-x-auto border rounded-xl">
-        <table class="w-full text-left text-xs text-slate-600">
-          <thead class="bg-slate-100 text-slate-700 font-bold border-b">
-            <tr>
-              <th class="p-3">單號</th>
-              <th class="p-3">寄售人/單位</th>
-              <th class="p-3">聯絡電話</th>
-              <th class="p-3">存放分店</th>
-              <th class="p-3">總金額</th>
-              <th class="p-3">建立日期</th>
-              <th class="p-3">操作</th>
-            </tr>
-          </thead>
-          <tbody id="consignTableBody" class="divide-y"></tbody>
-        </table>
-      </div>
-    </div>
   </div>
 
   <script>
-    const SUPABASE_URL = "https://gkfudwnkkrabhnmvifop.supabase.co";
-    const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdrZnVkd25ra3JhYmhubXZpZm9wIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgxNzg5NjAsImV4cCI6MjEwMzc1NDk2MH0.r3cEqVpdR0PD4TFu_2QOhDOqLiwWh5FHUVmpa168Fuk";
-    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    const { createApp, ref, onMounted } = Vue;
 
-    let dbBooks = [];
-    let dbCrafts = [];
-    let consignItems = [];
+    createApp({
+      setup() {
+        const isLoggedIn = ref(false);
+        const isGuest = ref(false);
+        const passwordInput = ref('');
+        const loginError = ref('');
 
-    // 🔑 監聽登入狀態
-    document.addEventListener("DOMContentLoaded", () => {
-      supabaseClient.auth.onAuthStateChange((event, session) => {
-        if (session) {
-          // 已登入 -> 顯示系統，隱藏登入頁
-          document.getElementById('loginView').classList.add('hidden');
-          document.getElementById('appView').classList.remove('hidden');
-          document.getElementById('userEmailTag').innerText = session.user.email;
-          initData();
-        } else {
-          // 未登入 -> 顯示登入頁，隱藏系統
-          document.getElementById('loginView').classList.remove('hidden');
-          document.getElementById('appView').classList.add('hidden');
-        }
-      });
-    });
+        const currentTab = ref('receipts');
+        const showReceiptModal = ref(false);
 
-    // 登入功能
-    async function handleLogin(e) {
-      e.preventDefault();
-      const email = document.getElementById('loginEmail').value;
-      const password = document.getElementById('loginPassword').value;
-      const errorEl = document.getElementById('loginError');
-      const btn = document.getElementById('loginBtn');
+        const storeInfo = ref({
+          name: '無所事事小書店',
+          phone: '53253883',
+          email: 'donothing.bookshop@gmail.com',
+          instagram: 'https://www.instagram.com/donothing_bookshop',
+          logo: ''
+        });
 
-      errorEl.classList.add('hidden');
-      btn.innerText = "登入中...";
-      btn.disabled = true;
+        const consignors = ref([
+          { id: 1, name: '張三出版', phone: '+852 9876 5432', splitRatio: '0.70' },
+          { id: 2, name: '手作生活文創', phone: '+852 6123 4567', splitRatio: '0.65' }
+        ]);
 
-      const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+        const newConsignor = ref({ name: '', phone: '', splitRatio: '0.70' });
+        const receipts = ref([]);
+        const activeReceipt = ref({
+          consignorId: '',
+          consignorName: '',
+          consignorPhone: '',
+          branch: '觀塘店',
+          notes: '0.70 拆分帳',
+          items: []
+        });
+        const printingReceipt = ref({});
 
-      btn.innerText = "登入系統";
-      btn.disabled = false;
+        onMounted(() => {
+          if (sessionStorage.getItem('v2_auth') === 'true') {
+            isLoggedIn.value = true;
+          }
+          const savedStore = localStorage.getItem('v2_store_info');
+          if (savedStore) storeInfo.value = JSON.parse(savedStore);
 
-      if (error) {
-        errorEl.innerText = "登入失敗：" + error.message;
-        errorEl.classList.remove('hidden');
+          const savedConsignors = localStorage.getItem('v2_consignors_list');
+          if (savedConsignors) consignors.value = JSON.parse(savedConsignors);
+
+          const savedReceipts = localStorage.getItem('v2_receipts_list');
+          if (savedReceipts) receipts.value = JSON.parse(savedReceipts);
+        });
+
+        const login = () => {
+          if (passwordInput.value === 'admin123') {
+            isLoggedIn.value = true;
+            isGuest.value = false;
+            sessionStorage.setItem('v2_auth', 'true');
+            loginError.value = '';
+          } else {
+            loginError.value = '密碼錯誤，請重新輸入！';
+          }
+        };
+
+        const loginAsGuest = () => {
+          isLoggedIn.value = true;
+          isGuest.value = true;
+        };
+
+        const logout = () => {
+          isLoggedIn.value = false;
+          sessionStorage.removeItem('v2_auth');
+        };
+
+        const saveStoreInfo = () => {
+          localStorage.setItem('v2_store_info', JSON.stringify(storeInfo.value));
+          alert('書店資料與 Logo 設定已更新！');
+        };
+
+        const handleLogoUpload = (event) => {
+          const file = event.target.files[0];
+          if (file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+              storeInfo.value.logo = e.target.result;
+            };
+            reader.readAsDataURL(file);
+          }
+        };
+
+        const addConsignor = () => {
+          if (!newConsignor.value.name) return;
+          consignors.value.push({
+            id: Date.now(),
+            ...newConsignor.value
+          });
+          localStorage.setItem('v2_consignors_list', JSON.stringify(consignors.value));
+          newConsignor.value = { name: '', phone: '', splitRatio: '0.70' };
+        };
+
+        const deleteConsignor = (id) => {
+          consignors.value = consignors.value.filter(c => c.id !== id);
+          localStorage.setItem('v2_consignors_list', JSON.stringify(consignors.value));
+        };
+
+        const openReceiptModal = () => {
+          activeReceipt.value = {
+            consignorId: '',
+            consignorName: '',
+            consignorPhone: '',
+            branch: '觀塘店',
+            notes: '',
+            items: [
+              { type: '書籍', name: '', code: '', price: null, qty: 1 }
+            ]
+          };
+          showReceiptModal.value = true;
+        };
+
+        const onConsignorSelect = () => {
+          const selected = consignors.value.find(c => c.id === activeReceipt.value.consignorId);
+          if (selected) {
+            activeReceipt.value.consignorName = selected.name;
+            activeReceipt.value.consignorPhone = selected.phone;
+            activeReceipt.value.notes = `${selected.splitRatio || '0.70'} 拆分帳`;
+          }
+        };
+
+        const addItem = (type) => {
+          activeReceipt.value.items.push({
+            type: type,
+            name: '',
+            code: '',
+            price: null,
+            qty: 1
+          });
+        };
+
+        const removeItem = (index) => {
+          activeReceipt.value.items.splice(index, 1);
+        };
+
+        const calculateTotal = () => {
+          return activeReceipt.value.items.reduce((sum, item) => {
+            return sum + ((item.price || 0) * (item.qty || 0));
+          }, 0);
+        };
+
+        const saveAndPrintReceipt = () => {
+          if (!activeReceipt.value.consignorName) {
+            alert('請選擇或輸入寄售者名稱');
+            return;
+          }
+
+          const receiptId = 'REC' + Date.now().toString().slice(-6);
+          const newReceipt = {
+            id: receiptId,
+            consignorName: activeReceipt.value.consignorName,
+            consignorPhone: activeReceipt.value.consignorPhone,
+            branch: activeReceipt.value.branch,
+            notes: activeReceipt.value.notes,
+            items: [...activeReceipt.value.items],
+            totalAmount: calculateTotal(),
+            createdAt: new Date().toLocaleDateString('zh-HK')
+          };
+
+          receipts.value.unshift(newReceipt);
+          localStorage.setItem('v2_receipts_list', JSON.stringify(receipts.value));
+
+          showReceiptModal.value = false;
+          printReceipt(newReceipt);
+        };
+
+        const printReceipt = (receipt) => {
+          printingReceipt.value = receipt;
+          setTimeout(() => {
+            window.print();
+          }, 200);
+        };
+
+        const deleteReceipt = (id) => {
+          if (confirm('確定要刪除此寄售單據紀錄嗎？')) {
+            receipts.value = receipts.value.filter(r => r.id !== id);
+            localStorage.setItem('v2_receipts_list', JSON.stringify(receipts.value));
+          }
+        };
+
+        return {
+          isLoggedIn,
+          isGuest,
+          passwordInput,
+          loginError,
+          login,
+          loginAsGuest,
+          logout,
+          currentTab,
+          showReceiptModal,
+          storeInfo,
+          consignors,
+          newConsignor,
+          receipts,
+          activeReceipt,
+          printingReceipt,
+          saveStoreInfo,
+          handleLogoUpload,
+          addConsignor,
+          deleteConsignor,
+          openReceiptModal,
+          onConsignorSelect,
+          addItem,
+          removeItem,
+          calculateTotal,
+          saveAndPrintReceipt,
+          printReceipt,
+          deleteReceipt
+        };
       }
-    }
-
-    // 登出功能
-    async function handleLogout() {
-      await supabaseClient.auth.signOut();
-    }
-
-    // 載入資料
-    async function initData() {
-      await loadBooks();
-      await loadCrafts();
-      await loadConsignments();
-    }
-
-    // 切換 TAB
-    function switchTab(tab) {
-      document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
-      document.getElementById('tab' + tab.charAt(0).toUpperCase() + tab.slice(1)).classList.remove('hidden');
-    }
-
-    async function loadBooks() {
-      const { data } = await supabaseClient.from('books').select('*');
-      dbBooks = data || [];
-      renderBooks();
-    }
-
-    async function loadCrafts() {
-      const { data } = await supabaseClient.from('craft_items').select('*');
-      dbCrafts = data || [];
-      renderCrafts();
-    }
-
-    async function loadConsignments() {
-      const { data } = await supabaseClient.from('consignments').select('*');
-      consignItems = data || [];
-      renderConsignments();
-    }
-
-    function renderBooks() {
-      const tbody = document.getElementById('bookTableBody');
-      tbody.innerHTML = dbBooks.map(b => `
-        <tr>
-          <td class="p-3"><img src="${b.cover_url || ''}" class="w-10 h-14 object-cover rounded"></td>
-          <td class="p-3 font-bold">${b.title || '-'}</td>
-          <td class="p-3">${b.is_consignment ? '寄售' : '買斷'}</td>
-          <td class="p-3">${b.store || '-'}</td>
-          <td class="p-3">${b.isbn || '-'}</td>
-          <td class="p-3">$${b.price || 0}</td>
-          <td class="p-3">${b.stock || 0}</td>
-          <td class="p-3">${b.status || '上架'}</td>
-          <td class="p-3">-</td>
-        </tr>
-      `).join('');
-    }
-
-    function renderCrafts() {
-      const tbody = document.getElementById('craftTableBody');
-      tbody.innerHTML = dbCrafts.map(c => `
-        <tr>
-          <td class="p-3"><img src="${c.image_url || ''}" class="w-10 h-10 object-cover rounded"></td>
-          <td class="p-3 font-bold">${c.title || '-'}</td>
-          <td class="p-3">${c.creator || '-'}</td>
-          <td class="p-3">${c.contact || '-'}</td>
-          <td class="p-3">${c.store || '-'}</td>
-          <td class="p-3">$${c.price || 0}</td>
-          <td class="p-3">${c.stock || 0}</td>
-          <td class="p-3">-</td>
-        </tr>
-      `).join('');
-    }
-
-    function renderConsignments() {
-      const tbody = document.getElementById('consignTableBody');
-      tbody.innerHTML = consignItems.map(c => `
-        <tr>
-          <td class="p-3 font-bold">${c.consignment_no || '-'}</td>
-          <td class="p-3">${c.consigner_name || '-'}</td>
-          <td class="p-3">${c.phone || '-'}</td>
-          <td class="p-3">${c.store || '-'}</td>
-          <td class="p-3">$${c.total_amount || 0}</td>
-          <td class="p-3">${c.created_at ? c.created_at.split('T')[0] : '-'}</td>
-          <td class="p-3">-</td>
-        </tr>
-      `).join('');
-    }
+    }).mount('#app');
   </script>
 </body>
 </html>
